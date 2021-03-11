@@ -1,5 +1,11 @@
+import logging
 
-from pyhap.accessory import Accessory
+import os
+import json
+import threading
+import sys
+
+from pyhap.accessory import Accessory, Bridge
 from pyhap.const import CATEGORY_SENSOR
 
 from bluepy.btle import Scanner, DefaultDelegate
@@ -12,6 +18,8 @@ class ThermoBeacon(Accessory):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
+        self.logger = logging.getLogger('ThermoBeacon')
+        
         self._mac='00:00:00:00:00:00'
         
         self.time_ticks = 0
@@ -44,11 +52,11 @@ class ThermoBeacon(Accessory):
 
     @Accessory.run_at_interval(10)
     async def run(self):
+        self.logger.debug( self.mac + ' ' + str(self.time_ticks))
         if self.time_ticks>0:
             self.time_ticks-=1
             self.char_temp.set_value(self.v_temperature)
             self.char_humidity.set_value(self.v_humidity)
-            #print('time', self.time_ticks)
             batt_low = 0 if self.v_battery_level > 15 else 1
             self.battery.get_characteristic('BatteryLevel').set_value(self.v_battery_level)
             self.battery.get_characteristic('StatusLowBattery').set_value(batt_low)
@@ -56,6 +64,7 @@ class ThermoBeacon(Accessory):
 
     @property
     def available(self):
+        self.logger.debug('available ' + str(self.time_ticks))
         return True if self.time_ticks>0 else False
 
     @property
@@ -82,12 +91,17 @@ class ThermoBeacon(Accessory):
 
 
 class ScanDelegate(DefaultDelegate):
+
     def __init__(self):
         DefaultDelegate.__init__(self)
 
+        self.logger = logging.getLogger('ThermoBeacon')
+        
+        """ Accessories """
+        self.thermo_beacons = dict()
+
     def handleDiscovery(self, dev, isNewDev, isNewData):
-        #device=self.parent.thermo_beacons.get(dev.addr)
-        device = self.worker.getDevice(dev.addr)
+        device = self.thermo_beacons.get(dev.addr)
         if device is None:
             return;
         if isNewDev:
@@ -96,6 +110,7 @@ class ScanDelegate(DefaultDelegate):
         elif isNewData:
             #print( "Received new data from", dev.addr )
 
+            #self.logger.debug('discobvery:' + dev.addr)
             complete_name=dev.getValueText(0x09)
             manufact_data=dev.getValueText(0xff)
             if complete_name is None or manufact_data is None:
@@ -112,6 +127,12 @@ class ScanDelegate(DefaultDelegate):
             device.v_battery_level = int( v_bat/4096*100 )
             #print(f'time(s): {t_sec:d}, adv: {v_adv:02x}, temperature: {t_tmp:.2f}, humidity: {t_hum:.1f}, unknown:{v_unkn1:d}')
 
+    def addBeacon(self, driver, macAddress, displayName):
+        self.thermo_beacons[macAddress]=ThermoBeacon(driver,displayName)
+        self.thermo_beacons[macAddress].mac=macAddress
+        self.logger.debug('Added beacon ' + macAddress)
+        return self.thermo_beacons[macAddress]
+
 def parseData20(bvalue):
     v_adv=bvalue[3]
     v_bat=int.from_bytes(bvalue[10:12],byteorder='little')
@@ -123,3 +144,71 @@ def parseData20(bvalue):
     v_mac=int.from_bytes(bvalue[4:10],byteorder='little')
     #print('{0:012x}'.format(v_mac))
     return v_adv, v_bat, t_tmp, t_hum, t_sec
+
+
+class BTScannerThread(threading.Thread):
+    #def __init__(self, event):
+    def __init__(self):
+        threading.Thread.__init__(self)
+        #self.stopped = event
+        self.stopped = threading.Event()
+
+        self.logger = logging.getLogger('ThermoBeacon')
+        self.logger.setLevel(logging.DEBUG)
+        
+        #for thread synchronization
+        self.lock = threading.Lock()
+
+        #remote sensors configuration (TFA units)
+        self.config = dict()
+
+        with open(os.path.expanduser('~/.hap-python/hap_config.json')) as config_file:
+            config_data = json.load(config_file)
+        for d in config_data:
+            self.config[d['mac']]=d['name']
+
+        self.scan_delegate=ScanDelegate()
+
+    def run(self):
+        while not self.stopped.wait(5):
+            scanner = Scanner().withDelegate(self.scan_delegate)
+            try:
+                self.logger.debug('start scanning')
+                scanner.start()
+                scanner.process(25)
+                scanner.stop()
+            except Exception as inst:
+                exc_type, exc_obj, exc_tb = sys.exc_info()
+                #print(type(inst), exc_tb.tb_lineno)
+                self.logger.debug('Exception ' + str(type(inst)))
+                pass
+        self.logger.debug('exit thread')
+
+    def get_bridge(self, driver):
+        """Call this method to get a Bridge instead of a standalone accessory."""
+        bridge = Bridge(driver, 'BT Bridge')
+        for mac in self.config:
+            beacon = self.scan_delegate.addBeacon(driver, mac, self.config[mac])
+            bridge.add_accessory(beacon)
+            
+        return bridge
+
+######################################################################
+
+#Transmit Handle 0x0021
+TX_CHAR_UUID = btle.UUID('0000fff5-0000-1000-8000-00805F9B34FB')
+#Read Handle 0x0024
+RX_CHAR_UUID = btle.UUID('0000fff3-0000-1000-8000-00805F9B34FB')
+
+#Function to send a string to the device as a bytearray and return the results received
+def write_bytes(dev, vals):
+    #Get handles to the transmit and receieve characteristics
+    tx = dev.getCharacteristics(uuid=TX_CHAR_UUID)[0]
+    rx = dev.getCharacteristics(uuid=RX_CHAR_UUID)[0]
+    write_val = bytearray.fromhex(vals)
+    tx.write(write_val)
+    read_val = rx.read()
+    return read_val
+
+######################################################################
+
