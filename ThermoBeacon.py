@@ -1,9 +1,6 @@
 import logging
 
-import os
-import json
 import threading
-import sys
 
 from pyhap.accessory import Accessory, Bridge
 from pyhap.const import CATEGORY_SENSOR
@@ -23,9 +20,12 @@ class ThermoBeacon(Accessory):
         self._mac='00:00:00:00:00:00'
         
         self.time_ticks = 0
+
         self.v_temperature = 0
         self.v_humidity = 0
         self.v_battery_level = 0
+        self.v_button = false
+        self.v_uptime = 0
 
         serv_temp = self.add_preload_service('TemperatureSensor', chars=['StatusLowBattery'])
         
@@ -44,9 +44,8 @@ class ThermoBeacon(Accessory):
             dev = btle.Peripheral(self.mac)
             write_bytes(dev, '02000000')
             dev.disconnect()
-        except Exception as inst:
-            exc_type, exc_obj, exc_tb = sys.exc_info()
-            #print(type(inst), exc_tb.tb_lineno)
+        except Exception as exc:
+            self.logger.debug('Exception ' + exc)
             pass
         pass
 
@@ -106,11 +105,9 @@ class ScanDelegate(DefaultDelegate):
             return;
         if isNewDev:
             pass
-            #print( "Discovered device", dev.addr )
         elif isNewData:
-            #print( "Received new data from", dev.addr )
-
             #self.logger.debug('discobvery:' + dev.addr)
+
             complete_name=dev.getValueText(0x09)
             manufact_data=dev.getValueText(0xff)
             if complete_name is None or manufact_data is None:
@@ -130,7 +127,7 @@ class ScanDelegate(DefaultDelegate):
     def addBeacon(self, driver, macAddress, displayName):
         self.thermo_beacons[macAddress]=ThermoBeacon(driver,displayName)
         self.thermo_beacons[macAddress].mac=macAddress
-        self.logger.debug('Added beacon ' + macAddress)
+        self.logger.info('Added beacon ' + macAddress)
         return self.thermo_beacons[macAddress]
 
 def parseData20(bvalue):
@@ -147,12 +144,10 @@ def parseData20(bvalue):
 
 
 class BTScannerThread(threading.Thread):
-    #def __init__(self, event):
-    def __init__(self):
+    def __init__(self, event, beacons):
         threading.Thread.__init__(self)
-        #self.stopped = event
-        self.stopped = threading.Event()
-
+        self.stopped = event
+    
         self.logger = logging.getLogger('ThermoBeacon')
         self.logger.setLevel(logging.DEBUG)
         
@@ -160,13 +155,9 @@ class BTScannerThread(threading.Thread):
         self.lock = threading.Lock()
 
         #remote sensors configuration (TFA units)
-        self.config = dict()
+        #self.config = dict()
 
-        with open(os.path.expanduser('~/.hap-python/hap_config.json')) as config_file:
-            config_data = json.load(config_file)
-        for d in config_data:
-            self.config[d['mac']]=d['name']
-
+        self.config=beacons
         self.scan_delegate=ScanDelegate()
 
     def run(self):
@@ -177,10 +168,9 @@ class BTScannerThread(threading.Thread):
                 scanner.start()
                 scanner.process(25)
                 scanner.stop()
-            except Exception as inst:
-                exc_type, exc_obj, exc_tb = sys.exc_info()
-                #print(type(inst), exc_tb.tb_lineno)
-                self.logger.debug('Exception ' + str(type(inst)))
+            except Exception as exc:
+                #self.logger.debug('Exception ' + str(type(exc)))
+                self.logger.debug('Exception ' + exc)
                 pass
         self.logger.debug('exit thread')
 
