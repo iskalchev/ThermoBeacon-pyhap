@@ -11,11 +11,7 @@ import json
 import os
 import sys
 
-
-<<<<<<< HEAD
-=======
-#
->>>>>>> 386c0c54445a00b421e4f2c5dd0e7dfd124f0d16
+##
 from pyhap.accessory_driver import AccessoryDriver
 import pyhap.loader as loader
 
