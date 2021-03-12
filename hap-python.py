@@ -10,7 +10,7 @@ import json
 
 import os
 import sys
-#3006129991
+
 from pyhap.accessory_driver import AccessoryDriver
 import pyhap.loader as loader
 
