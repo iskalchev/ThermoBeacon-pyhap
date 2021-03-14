@@ -5,17 +5,16 @@ This is:
     setup a server to answer client queries, etc.
 """
 import logging
-import threading, signal
+import signal
 import json
 
 import os
 import sys
 
-##
 from pyhap.accessory_driver import AccessoryDriver
 import pyhap.loader as loader
 
-from ThermoBeacon import BTScannerThread
+from ThermoBeacon import ThermoBeaconBridge
 
 logging.basicConfig(level=logging.INFO, format="[%(module)s] %(message)s")
 
@@ -28,26 +27,17 @@ def load_config():
     return config
 
 config = load_config()
-stop_flag = threading.Event()
-scanner_thread = BTScannerThread(event=stop_flag, beacons=config)
-scanner_thread.daemon = True
-scanner_thread.start()
 
 # Start the accessory on port 51826
 driver = AccessoryDriver(port=51826,persist_file='~/.hap-python/accessory.state', pincode=b'123-12-123')
-bridge = scanner_thread.get_bridge(driver)
+bridge = ThermoBeaconBridge(driver, config)
 
 #Run a Bridge
 driver.add_accessory(accessory=bridge)
 
 # We want SIGTERM (terminate) to be handled by the driver itself,
 # so that it can gracefully stop the accessory, server and advertising.
-#signal.signal(signal.SIGTERM, driver.signal_handler)
-def signal_handler(_signal, _frame):
-    stop_flag.set()
-    driver.signal_handler(_signal, _frame)
-    
-signal.signal(signal.SIGTERM, signal_handler)
+signal.signal(signal.SIGTERM, driver.signal_handler)
 
 # Start it!
 driver.start()
