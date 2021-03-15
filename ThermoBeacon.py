@@ -23,8 +23,7 @@ class ThermoBeacon(Accessory):
         
         self._mac='00:00:00:00:00:00'
         
-        self.time_ticks = 0
-        self.time_stamp = 0
+        self.expire_time = 0
 
         self.v_temperature = 0
         self.v_humidity = 0
@@ -32,17 +31,50 @@ class ThermoBeacon(Accessory):
         self.v_button = False
         self.v_uptime = 0
 
-        serv_temp = self.add_preload_service('TemperatureSensor', chars=['StatusLowBattery'])
+        service = self.add_preload_service('TemperatureSensor', chars=['StatusLowBattery'])
         
-        self.char_temp = serv_temp.configure_char('CurrentTemperature')
-        self.char_low_batt = serv_temp.get_characteristic('StatusLowBattery')
+        #self.char_temp = serv_temp.configure_char('CurrentTemperature')
+        service.configure_char(
+            'CurrentTemperature',
+            getter_callback = lambda: self.v_temperature
+            #properties=self.common_properties
+        )
+        service.configure_char(
+            'StatusLowBattery',
+            getter_callback = self.get_low_battery
+            #properties=self.common_properties
+        )
 
-        self.battery=self.add_preload_service('BatteryService')
-        serv_humidity = self.add_preload_service('HumiditySensor')
-        self.char_humidity = serv_humidity.configure_char('CurrentRelativeHumidity')
+        
+        service = self.add_preload_service('BatteryService')
+        low_battery = service.get_characteristic('StatusLowBattery')
+        service.configure_char(
+            'StatusLowBattery',
+            #value=low_battery.properties['ValidValues']['BatteryLevelNormal'],
+            getter_callback=self.get_low_battery
+        )
+        charging_state = service.get_characteristic('ChargingState')
+        service.configure_char(
+            'ChargingState',
+            value=charging_state.properties['ValidValues']['NotChargeable'],
+        )
+        
+        service = self.add_preload_service('HumiditySensor')
+        service.configure_char(
+            'CurrentRelativeHumidity',
+            getter_callback=lambda: self.v_humidity
+        )
 
         self.get_service("AccessoryInformation").get_characteristic("Identify").set_value(1)
         self.get_service("AccessoryInformation").configure_char('Identify', setter_callback=self.set_identify)
+
+    def get_low_battery(self):
+        logger.debug('get low battery')
+        return 0 if self.available else (0 if self.v_batt_level > 15 else 1)
+
+    def get_temperature(self):
+        logger.debug('get temperature')
+        return self.v_temperature
 
     def set_identify(self, value):
         try:
@@ -55,24 +87,33 @@ class ThermoBeacon(Accessory):
         pass
 
     async def run(self):
-        logger.debug( self.mac + ' ' + str(time.time()-self.time_stamp))
+        t=int(self.expire_time-time.time())
+        logger.debug( self.mac + ' ' + str(t))
 
-        #if( tmie.time()-self.time_stamp
-        #if self.time_ticks>0:
-        #    self.time_ticks-=1
-        self.char_temp.set_value(self.v_temperature)
-        self.char_humidity.set_value(self.v_humidity)
         batt_low = 0 if self.v_batt_level > 15 else 1
-        self.battery.get_characteristic('BatteryLevel').set_value(self.v_batt_level)
-        self.battery.get_characteristic('StatusLowBattery').set_value(batt_low)
-        self.char_low_batt.set_value(batt_low)
+        
+        #self.char_temp.set_value(self.v_temperature)
+        #self.char_humidity.set_value(self.v_humidity)
+        #self.battery.get_characteristic('BatteryLevel').set_value(self.v_batt_level)
+        #self.battery.get_characteristic('StatusLowBattery').set_value(batt_low)
+        #self.char_low_batt.set_value(batt_low)
+
+        service = self.get_service('TemperatureSensor')
+        service.get_characteristic('CurrentTemperature').set_value(self.v_temperature)
+        service.get_characteristic('StatusLowBattery').set_value(batt_low)
+
+        service = self.get_service('HumiditySensor')
+        service.get_characteristic('CurrentRelativeHumidity').set_value(self.v_humidity)
+        
+        service = self.get_service('BatteryService')
+        service.get_characteristic('BatteryLevel').set_value(self.v_batt_level)
+        service.get_characteristic('StatusLowBattery').set_value(batt_low)
 
     @property
     def available(self):
-        #logger.debug('available ' + str(self.time_ticks))
-        #return True if self.time_ticks>0 else False
-        logger.debug('available ' + str(time.time()-self.time_stamp))
-        return True if time.time()-self.time_stamp<90 else False
+        t=int(self.expire_time-time.time())
+        logger.debug(self.mac + ' available ' + str(t))
+        return True if t>0 else False
 
     @property
     def mac(self):
@@ -91,7 +132,7 @@ class ThermoBeacon(Accessory):
         self.v_humidity    = data.hum
         self.v_uptime      = data.upt
 
-        self.time_stamp = time.time()
+        self.expire_time = time.time()+90
     
     async def stop(self):
         logger.debug('Stop ' + self.mac)
@@ -124,10 +165,9 @@ class ScanDelegate(DefaultDelegate):
             if len(bvalue)!=20 or complete_name!='ThermoBeacon':
                 return
             device.parseData(bvalue)
-            device.time_ticks=15
- 
+            
     def addBeacon(self, driver, macAddress, displayName):
-        self.thermo_beacons[macAddress]=ThermoBeacon(driver,displayName)
+        self.thermo_beacons[macAddress]=ThermoBeacon(driver, display_name = displayName)
         self.thermo_beacons[macAddress].mac=macAddress
         logger.info('Added beacon ' + macAddress)
         return self.thermo_beacons[macAddress]
@@ -158,6 +198,7 @@ class ThermoBeaconBridge(Bridge):
         while not await event_wait(self.driver.aio_stop_event, self.update_interval):
             logger.debug('Updating accessories info.')
             await super().run()
+            logger.debug('End Updating accessories info.')
 
 class BTScannerThread(threading.Thread):
     def __init__(self, event):
