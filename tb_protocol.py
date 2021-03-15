@@ -9,4 +9,4 @@ class TBMsgAdvertise:
             self.tmp -= 4096
         self.hum = int.from_bytes(bvalue[14:16],byteorder='little')/16.0
         self.upt = int.from_bytes(bvalue[16:20],byteorder='little')
-        
+
