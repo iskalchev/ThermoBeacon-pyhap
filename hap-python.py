@@ -14,15 +14,17 @@ import signal
 import json
 
 import os
-import sys
 
 from pyhap.accessory_driver import AccessoryDriver
-import pyhap.loader as loader
 
 from ThermoBeacon import ThermoBeaconBridge
 
 logging.basicConfig(level=logging.INFO, format="[%(module)s] %(message)s")
 
+
+'''
+Load configuration
+'''
 def load_config():
     config = dict()
     with open(os.path.expanduser('~/.hap-python/beacons.json')) as cfg_file:

@@ -33,7 +33,6 @@ class ThermoBeacon(Accessory):
 
         service = self.add_preload_service('TemperatureSensor', chars=['StatusLowBattery'])
         
-        #self.char_temp = serv_temp.configure_char('CurrentTemperature')
         service.configure_char(
             'CurrentTemperature',
             getter_callback = lambda: self.v_temperature
@@ -47,15 +46,13 @@ class ThermoBeacon(Accessory):
 
         
         service = self.add_preload_service('BatteryService')
-        low_battery = service.get_characteristic('StatusLowBattery')
         service.configure_char(
             'StatusLowBattery',
-            #value=low_battery.properties['ValidValues']['BatteryLevelNormal'],
             getter_callback=self.get_low_battery
         )
         charging_state = service.get_characteristic('ChargingState')
         service.configure_char(
-            'ChargingState',
+            'ChargingState', 
             value=charging_state.properties['ValidValues']['NotChargeable'],
         )
         
@@ -92,12 +89,6 @@ class ThermoBeacon(Accessory):
 
         batt_low = 0 if self.v_batt_level > 15 else 1
         
-        #self.char_temp.set_value(self.v_temperature)
-        #self.char_humidity.set_value(self.v_humidity)
-        #self.battery.get_characteristic('BatteryLevel').set_value(self.v_batt_level)
-        #self.battery.get_characteristic('StatusLowBattery').set_value(batt_low)
-        #self.char_low_batt.set_value(batt_low)
-
         service = self.get_service('TemperatureSensor')
         service.get_characteristic('CurrentTemperature').set_value(self.v_temperature)
         service.get_characteristic('StatusLowBattery').set_value(batt_low)
