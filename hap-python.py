@@ -34,7 +34,7 @@ def load_config():
 config = load_config()
 
 # Start the accessory on port 51826
-driver = AccessoryDriver(port=51826,persist_file='~/.hap-python/accessory.state', pincode=b'123-12-123')
+driver = AccessoryDriver(port=51826,persist_file='~/.hap-python/.accessory.state', pincode=b'123-12-123')
 bridge = ThermoBeaconBridge(driver, config)
 
 #Run a Bridge
