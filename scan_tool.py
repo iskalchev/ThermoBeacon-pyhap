@@ -40,5 +40,7 @@ while True:
         #print(str(exc))
         pass
     except KeyboardInterrupt:
-        print('\nInterrupted')
+        print('\nInterrupted!')
         sys.exit(0)
+
+
