@@ -203,12 +203,8 @@ class ThermoBeaconBridge(Bridge):
 class BTScannerThread(threading.Thread):
     def __init__(self, event):
         threading.Thread.__init__(self)
-        self.stop_event = event
-    
-        #for thread synchronization
-        self.lock = threading.Lock()
 
-        #self.config=beacons
+        self.stop_event = event
         self.scanDelegate=ScanDelegate()
 
     def run(self):
