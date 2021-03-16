@@ -1,8 +1,13 @@
-"""An example of how to setup and start an Accessory.
+"""An example of how to setup and start a ThermoBeacon Bridge.
 This is:
-1. Create the Accessory object you want.
-2. Add it to an AccessoryDriver, which will advertise it on the local network,
-    setup a server to answer client queries, etc.
+1. Create a dictionary object (or load it from config file) that holds configuration.
+   The keys are mac addresses and the values are the beacon names:
+      config = {
+                  '11:22:00:00:00:01' : 'garage',
+                  '33:44:00:00:00:02' : 'living room'
+               }
+2. Create AccessoryDriver Object.
+2. Create the ThermoBeacon object and add it to an AccessoryDriver
 """
 import logging
 import signal

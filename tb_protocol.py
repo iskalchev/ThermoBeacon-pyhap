@@ -1,3 +1,18 @@
+'''
+Decode Manufacturer specific data from BTLE Advertising message
+
+Message length: 20 bytes
+
+bytes | content
+========================================================
+00-02 | 01 00 00
+03-03 | 0x80 if Button is pressed else 00
+04-09 | mac address
+10-11 | battery level: seems that 4096 = 100% (not sure)
+12-13 | temperature
+14-15 | hummidity
+16-19 | uptime: seconds sinse the last reset
+'''
 class TBMsgAdvertise:
     def __init__(self, bvalue):
         self.btn = False if bvalue[3]==0 else True
