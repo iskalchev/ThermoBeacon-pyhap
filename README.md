@@ -1,5 +1,8 @@
 # ThermoBeacon-pyhap
 
-Bridge for Brifit bluetooth termometer/hygrometer
 
-x
+
+[HAP-python](https://github.com/ikalchev/HAP-python) Bridge for Brifit bluetooth termometer/hygrometer
+
+
+ 

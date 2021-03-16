@@ -1,70 +1,119 @@
 import logging
 
-import threading
+import threading, time
 
 from pyhap.accessory import Accessory, Bridge
 from pyhap.const import CATEGORY_SENSOR
+from pyhap.util import event_wait
 
 from bluepy.btle import Scanner, DefaultDelegate
 from bluepy import btle
 
+import tb_protocol
+
+logger = logging.getLogger('ThermoBeacon')
+logger.setLevel(logging.DEBUG)
+        
 class ThermoBeacon(Accessory):
 
     category = CATEGORY_SENSOR
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-
-        self.logger = logging.getLogger('ThermoBeacon')
         
         self._mac='00:00:00:00:00:00'
         
-        self.time_ticks = 0
+        self.expire_time = 0
 
         self.v_temperature = 0
         self.v_humidity = 0
-        self.v_battery_level = 0
-        self.v_button = false
+        self.v_batt_level = 0
+        self.v_button = False
         self.v_uptime = 0
 
-        serv_temp = self.add_preload_service('TemperatureSensor', chars=['StatusLowBattery'])
+        service = self.add_preload_service('TemperatureSensor', chars=['StatusLowBattery'])
         
-        self.char_temp = serv_temp.configure_char('CurrentTemperature')
-        self.battery=self.add_preload_service('BatteryService')
-        self.char_low_batt = serv_temp.get_characteristic('StatusLowBattery')
-        serv_humidity = self.add_preload_service('HumiditySensor')
-        self.char_humidity = serv_humidity.configure_char('CurrentRelativeHumidity')
+        #self.char_temp = serv_temp.configure_char('CurrentTemperature')
+        service.configure_char(
+            'CurrentTemperature',
+            getter_callback = lambda: self.v_temperature
+            #properties=self.common_properties
+        )
+        service.configure_char(
+            'StatusLowBattery',
+            getter_callback = self.get_low_battery
+            #properties=self.common_properties
+        )
+
+        
+        service = self.add_preload_service('BatteryService')
+        low_battery = service.get_characteristic('StatusLowBattery')
+        service.configure_char(
+            'StatusLowBattery',
+            #value=low_battery.properties['ValidValues']['BatteryLevelNormal'],
+            getter_callback=self.get_low_battery
+        )
+        charging_state = service.get_characteristic('ChargingState')
+        service.configure_char(
+            'ChargingState',
+            value=charging_state.properties['ValidValues']['NotChargeable'],
+        )
+        
+        service = self.add_preload_service('HumiditySensor')
+        service.configure_char(
+            'CurrentRelativeHumidity',
+            getter_callback=lambda: self.v_humidity
+        )
 
         self.get_service("AccessoryInformation").get_characteristic("Identify").set_value(1)
         self.get_service("AccessoryInformation").configure_char('Identify', setter_callback=self.set_identify)
 
+    def get_low_battery(self):
+        logger.debug('get low battery')
+        return 0 if self.available else (0 if self.v_batt_level > 15 else 1)
+
+    def get_temperature(self):
+        logger.debug('get temperature')
+        return self.v_temperature
+
     def set_identify(self, value):
-        #print('identify')
         try:
             dev = btle.Peripheral(self.mac)
             write_bytes(dev, '02000000')
             dev.disconnect()
         except Exception as exc:
-            self.logger.debug('Exception ' + exc)
+            logger.debug('Exception ' + str(exc))
             pass
         pass
 
-    @Accessory.run_at_interval(10)
     async def run(self):
-        self.logger.debug( self.mac + ' ' + str(self.time_ticks))
-        if self.time_ticks>0:
-            self.time_ticks-=1
-            self.char_temp.set_value(self.v_temperature)
-            self.char_humidity.set_value(self.v_humidity)
-            batt_low = 0 if self.v_battery_level > 15 else 1
-            self.battery.get_characteristic('BatteryLevel').set_value(self.v_battery_level)
-            self.battery.get_characteristic('StatusLowBattery').set_value(batt_low)
-            self.char_low_batt.set_value(batt_low)
+        t=int(self.expire_time-time.time())
+        logger.debug( self.mac + ' ' + str(t))
+
+        batt_low = 0 if self.v_batt_level > 15 else 1
+        
+        #self.char_temp.set_value(self.v_temperature)
+        #self.char_humidity.set_value(self.v_humidity)
+        #self.battery.get_characteristic('BatteryLevel').set_value(self.v_batt_level)
+        #self.battery.get_characteristic('StatusLowBattery').set_value(batt_low)
+        #self.char_low_batt.set_value(batt_low)
+
+        service = self.get_service('TemperatureSensor')
+        service.get_characteristic('CurrentTemperature').set_value(self.v_temperature)
+        service.get_characteristic('StatusLowBattery').set_value(batt_low)
+
+        service = self.get_service('HumiditySensor')
+        service.get_characteristic('CurrentRelativeHumidity').set_value(self.v_humidity)
+        
+        service = self.get_service('BatteryService')
+        service.get_characteristic('BatteryLevel').set_value(self.v_batt_level)
+        service.get_characteristic('StatusLowBattery').set_value(batt_low)
 
     @property
     def available(self):
-        self.logger.debug('available ' + str(self.time_ticks))
-        return True if self.time_ticks>0 else False
+        t=int(self.expire_time-time.time())
+        logger.debug(self.mac + ' available ' + str(t))
+        return True if t>0 else False
 
     @property
     def mac(self):
@@ -75,18 +124,19 @@ class ThermoBeacon(Accessory):
        self._mac=value
        self.set_info_service(serial_number=value)
 
-    #def parseData(self, bvalue):
-    #    v_adv=bvalue[3]
-    #    v_unkn1=t_tmp=int.from_bytes(bvalue[10:12],byteorder='little')
-    #    self.v_temperature = int.from_bytes(bvalue[12:14],byteorder='little')/16.0
-    #    if self.v_temperature>4000:
-    #        self.v_temperature -= 4096
-    #    self.v_humidity = int.from_bytes(bvalue[14:16],byteorder='little')/16.0
-    #    t_sec=int.from_bytes(bvalue[16:20],byteorder='little')
-    #    v_mac=int.from_bytes(bvalue[4:10],byteorder='little')
-    #    #print('{0:012x}'.format(v_mac))
-    #    #return v_adv, v_unkn1, t_tmp, t_hum, t_sec
+    def parseData(self, bvalue):
+        data = tb_protocol.TBMsgAdvertise(bvalue)
+        self.v_button      = data.btn
+        self.v_batt_level  = data.btr
+        self.v_temperature = data.tmp
+        self.v_humidity    = data.hum
+        self.v_uptime      = data.upt
 
+        self.expire_time = time.time()+90
+    
+    async def stop(self):
+        logger.debug('Stop ' + self.mac)
+        
 
 
 class ScanDelegate(DefaultDelegate):
@@ -94,19 +144,18 @@ class ScanDelegate(DefaultDelegate):
     def __init__(self):
         DefaultDelegate.__init__(self)
 
-        self.logger = logging.getLogger('ThermoBeacon')
-        
         """ Accessories """
         self.thermo_beacons = dict()
 
     def handleDiscovery(self, dev, isNewDev, isNewData):
         device = self.thermo_beacons.get(dev.addr)
+        #logger.debug('discobvery:--' + dev.addr + str(device))
         if device is None:
             return;
         if isNewDev:
             pass
-        elif isNewData:
-            #self.logger.debug('discobvery:' + dev.addr)
+        if True or isNewData:
+            #logger.debug('discobvery:' + dev.addr)
 
             complete_name=dev.getValueText(0x09)
             manufact_data=dev.getValueText(0xff)
@@ -115,73 +164,66 @@ class ScanDelegate(DefaultDelegate):
             bvalue=bytes.fromhex(manufact_data)
             if len(bvalue)!=20 or complete_name!='ThermoBeacon':
                 return
-            #device.parseData(bvalue)
-            device.time_ticks=15
-
-            v_adv, v_bat, t_tmp, t_hum, t_sec=parseData20(bvalue)
-            device.v_temperature = t_tmp
-            device.v_humidity = t_hum
-            device.v_battery_level = int( v_bat/4096*100 )
-            #print(f'time(s): {t_sec:d}, adv: {v_adv:02x}, temperature: {t_tmp:.2f}, humidity: {t_hum:.1f}, unknown:{v_unkn1:d}')
-
+            device.parseData(bvalue)
+            
     def addBeacon(self, driver, macAddress, displayName):
-        self.thermo_beacons[macAddress]=ThermoBeacon(driver,displayName)
+        self.thermo_beacons[macAddress]=ThermoBeacon(driver, display_name = displayName)
         self.thermo_beacons[macAddress].mac=macAddress
-        self.logger.info('Added beacon ' + macAddress)
+        logger.info('Added beacon ' + macAddress)
         return self.thermo_beacons[macAddress]
 
-def parseData20(bvalue):
-    v_adv=bvalue[3]
-    v_bat=int.from_bytes(bvalue[10:12],byteorder='little')
-    t_tmp=int.from_bytes(bvalue[12:14],byteorder='little')/16.0
-    if t_tmp>4000:
-        t_tmp -= 4096
-    t_hum=int.from_bytes(bvalue[14:16],byteorder='little')/16.0
-    t_sec=int.from_bytes(bvalue[16:20],byteorder='little')
-    v_mac=int.from_bytes(bvalue[4:10],byteorder='little')
-    #print('{0:012x}'.format(v_mac))
-    return v_adv, v_bat, t_tmp, t_hum, t_sec
 
+class ThermoBeaconBridge(Bridge):
+    def __init__(self, driver, config):
+        super().__init__(driver, display_name='ThermoBeacon Bridge')
+
+        self.update_interval = 10
+        
+        self.stop_flag = threading.Event()
+        self.scanner_thread = BTScannerThread(event=self.stop_flag)
+
+        #create Accessory objects
+        for mac in config:
+            beacon = self.scanner_thread.scanDelegate.addBeacon(driver, mac, config[mac])
+            self.add_accessory(beacon)
+
+        #Start ScannerThread
+        self.scanner_thread.start()
+
+    async def stop(self):
+        self.stop_flag.set()
+        await super().stop()
+
+    async def run(self):
+        while not await event_wait(self.driver.aio_stop_event, self.update_interval):
+            logger.debug('Updating accessories info.')
+            await super().run()
+            logger.debug('End Updating accessories info.')
 
 class BTScannerThread(threading.Thread):
-    def __init__(self, event, beacons):
+    def __init__(self, event):
         threading.Thread.__init__(self)
-        self.stopped = event
+        self.stop_event = event
     
-        self.logger = logging.getLogger('ThermoBeacon')
-        self.logger.setLevel(logging.DEBUG)
-        
         #for thread synchronization
         self.lock = threading.Lock()
 
-        #remote sensors configuration (TFA units)
-        #self.config = dict()
-
-        self.config=beacons
-        self.scan_delegate=ScanDelegate()
+        #self.config=beacons
+        self.scanDelegate=ScanDelegate()
 
     def run(self):
-        while not self.stopped.wait(5):
-            scanner = Scanner().withDelegate(self.scan_delegate)
+        while not self.stop_event.wait(5):
+            scanner = Scanner().withDelegate(self.scanDelegate)
             try:
-                self.logger.debug('start scanning')
+                logger.debug('Continue scanning')
+                scanner.clear()
                 scanner.start()
-                scanner.process(25)
+                scanner.process(20)
                 scanner.stop()
             except Exception as exc:
-                #self.logger.debug('Exception ' + str(type(exc)))
-                self.logger.debug('Exception ' + exc)
+                logger.debug('Exception > ' + str(exc))
                 pass
-        self.logger.debug('exit thread')
-
-    def get_bridge(self, driver):
-        """Call this method to get a Bridge instead of a standalone accessory."""
-        bridge = Bridge(driver, 'BT Bridge')
-        for mac in self.config:
-            beacon = self.scan_delegate.addBeacon(driver, mac, self.config[mac])
-            bridge.add_accessory(beacon)
-            
-        return bridge
+        logger.debug('ScannerThread: exit')
 
 ######################################################################
 
