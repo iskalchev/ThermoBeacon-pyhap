@@ -1,3 +1,8 @@
+'''
+Scanner tool for Brifit Bluetooth LE thermometer/hygrometer devices.
+Shows the characteristics of the found devices
+'''
+
 import sys
 from bluepy.btle import Scanner, DefaultDelegate
 
