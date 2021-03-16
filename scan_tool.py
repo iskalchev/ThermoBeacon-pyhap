@@ -23,15 +23,9 @@ class ScanDelegate(DefaultDelegate):
                 return
 
             data = tb_protocol.TBMsgAdvertise(bvalue)
-            v_button      = data.btn
-            v_batt_level  = data.btr
-            v_temperature = data.tmp
-            v_humidity    = data.hum
-            v_uptime      = data.upt
         
             print('MAC:{0}, T= {1:5.2f}\xb0C, H = {2:3.2f}%, Button:{4}, Battery : {5:02.0f}%, UpTime = {3:.0f}s'.\
                   format(dev.addr, data.tmp, data.hum, data.upt, 'On ' if data.btn else 'Off', data.btr))
-#            device.parseData(bvalue)
 
 scanDelegate = ScanDelegate()
 scanner = Scanner().withDelegate(scanDelegate)
