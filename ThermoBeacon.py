@@ -1,6 +1,7 @@
 import logging
 
-import threading, time
+import threading, asyncio, time
+from concurrent.futures import ThreadPoolExecutor
 
 from pyhap.accessory import Accessory, Bridge
 from pyhap.const import CATEGORY_SENSOR
@@ -13,6 +14,7 @@ import tb_protocol
 
 logger = logging.getLogger('ThermoBeacon')
 logger.setLevel(logging.DEBUG)
+
         
 class ThermoBeacon(Accessory):
 
@@ -186,11 +188,27 @@ class ThermoBeaconBridge(Bridge):
         await super().stop()
 
     async def run(self):
+        udp_srv_thread = UDPSrvThread(self)
+        udp_srv_thread.daemon = True
+        udp_srv_thread.start()
+
         while not await event_wait(self.driver.aio_stop_event, self.update_interval):
             logger.debug('Updating accessories info.')
             await super().run()
             logger.debug('End Updating accessories info.')
 
+    def config_message(self, message):
+        message = str(message).rstrip('\n')
+        logger.debug('Config Message: '+message)
+        result = 'invalid command'
+        if message=='list':
+            result = ''
+            devices = self.scanner_thread.scanDelegate.thermo_beacons
+            for dev in devices:
+                result += devices[dev].mac + '\n'
+        return result
+            
+            
 class BTScannerThread(threading.Thread):
     def __init__(self, event):
         threading.Thread.__init__(self)
@@ -211,6 +229,38 @@ class BTScannerThread(threading.Thread):
                 logger.debug('Exception > ' + str(exc))
                 pass
         logger.debug('ScannerThread: exit')
+
+class ConfigProtocol:
+    def __init__(self, bridge):
+        self.bridge = bridge
+    
+    def connection_made(self, transport):
+        self.transport = transport
+
+    def datagram_received(self, data, addr):
+        message = data.decode()
+        logger.debug('Received %r from %s' % (message, addr))
+        result = self.bridge.config_message(message)
+        logger.debug('Send %s to %s' % (result, addr))
+        self.transport.sendto(bytes(result, 'utf-8'), addr)
+
+'''
+echo "test" | socat -t 10 - udp:127.0.0.1:9999
+'''
+class UDPSrvThread(threading.Thread):
+    def __init__(self, bridge):
+        threading.Thread.__init__(self)
+        self.bridge = bridge
+
+    def run(self):
+        self.loop = asyncio.new_event_loop()
+        self.executor = ThreadPoolExecutor()
+        self.loop.set_default_executor(self.executor)
+        connect = self.loop.create_datagram_endpoint(
+            lambda: ConfigProtocol(self.bridge),
+            local_addr=('127.0.0.1', 9999))
+        transport, protocol = self.loop.run_until_complete(connect)
+        self.loop.run_forever()
 
 ######################################################################
 
