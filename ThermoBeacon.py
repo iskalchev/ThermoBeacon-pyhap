@@ -1,6 +1,6 @@
-import logging
+import logging, json
 
-import threading, asyncio, time
+import threading, asyncio, time, argparse
 from concurrent.futures import ThreadPoolExecutor
 
 from pyhap.accessory import Accessory, Bridge
@@ -26,6 +26,8 @@ class ThermoBeacon(Accessory):
         self._mac='00:00:00:00:00:00'
         
         self.expire_time = 0
+
+        self.identify_pending = False
 
         self.v_temperature = 0
         self.v_humidity = 0
@@ -76,14 +78,17 @@ class ThermoBeacon(Accessory):
         return self.v_temperature
 
     def set_identify(self, value):
-        try:
-            dev = btle.Peripheral(self.mac)
-            write_bytes(dev, '02000000')
-            dev.disconnect()
-        except Exception as exc:
-            logger.debug('Exception ' + str(exc))
-            pass
-        pass
+        for i in range(10):
+            try:
+                dev = btle.Peripheral(self.mac)
+                write_bytes(dev, '02000000')
+                dev.disconnect()
+                break
+            except Exception as exc:
+                logger.debug(self.mac)
+                logger.debug('Exception ' + str(exc))
+                pass
+            time.sleep(0.2)
 
     async def run(self):
         t=int(self.expire_time-time.time())
@@ -129,7 +134,6 @@ class ThermoBeacon(Accessory):
     
     async def stop(self):
         logger.debug('Stop ' + self.mac)
-        
 
 
 class ScanDelegate(DefaultDelegate):
@@ -157,7 +161,12 @@ class ScanDelegate(DefaultDelegate):
             bvalue=bytes.fromhex(manufact_data)
             if len(bvalue)!=20 or complete_name!='ThermoBeacon':
                 return
+            
             device.parseData(bvalue)
+            if device.identify_pending:
+                device.set_identify(1)
+                device.identify_pending = False
+
             
     def addBeacon(self, driver, macAddress, displayName):
         self.thermo_beacons[macAddress]=ThermoBeacon(driver, display_name = displayName)
@@ -200,12 +209,28 @@ class ThermoBeaconBridge(Bridge):
     def config_message(self, message):
         message = str(message).rstrip('\n')
         logger.debug('Config Message: '+message)
+        arg = json.JSONDecoder().decode(message)
         result = 'invalid command'
-        if message=='list':
+        if arg['command']=='list':
             result = ''
             devices = self.scanner_thread.scanDelegate.thermo_beacons
             for dev in devices:
-                result += devices[dev].mac + '\n'
+                device = devices[dev]
+                if device.available:
+                    result += '[{0}], T= {1:5.2f}\xb0C, H = {2:3.2f}%, UpTime = {3:.0f}s\n'.\
+                             format(device.mac, device.v_temperature, device.v_humidity, device.v_uptime)
+                else:
+                    result += '[{0}] - unavailable\n'.format(device.mac)
+        if arg['command']=='identify':
+            devices = self.scanner_thread.scanDelegate.thermo_beacons
+            dev = devices.get(arg['mac'])
+            if dev:
+                logger.debug('------------ '+str(dev))
+                result = 'indetifying....' + dev.mac
+                dev.identify_pending = True
+        if arg['command']=='add':
+            pass
+             
         return result
             
             
