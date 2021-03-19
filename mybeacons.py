@@ -12,16 +12,19 @@ def mac_addr(x):
 
  
 parser = ArgumentParser()
-subparsers = parser.add_subparsers(help='sub-command help', dest='command')
+subparsers = parser.add_subparsers(help='action', dest='command')
  
-sub = subparsers.add_parser('list', help = "command_a help")
-sub = subparsers.add_parser('add', help = "command_a help")
+sub = subparsers.add_parser('list', help = "List devices")
+sub = subparsers.add_parser('add', help = "Add device")
 sub.add_argument('-mac', type=mac_addr, required=True)
-sub = subparsers.add_parser('remove', help = "command_a help")
-sub = subparsers.add_parser('identify', help = "command_a help")
-sub.add_argument('-mac', required=True)
- 
-args = parser.parse_args(sys.argv[1:])
+sub = subparsers.add_parser('remove', help = "Remove device")
+sub.add_argument('-mac', type=mac_addr, required=True)
+sub = subparsers.add_parser('identify', help = "Identify a device")
+sub.add_argument('-mac', type=mac_addr, required=True)
+sub = subparsers.add_parser('config', help = 'Save configuration')
+sub.add_argument('-s', '--save', action='store_true', help='Save to config file')
+
+args = parser.parse_args()
  
 #print('=======')
 #parser.print_usage()

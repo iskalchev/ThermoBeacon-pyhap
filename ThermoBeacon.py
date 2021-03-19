@@ -229,7 +229,18 @@ class ThermoBeaconBridge(Bridge):
                 result = 'indetifying....' + dev.mac
                 dev.identify_pending = True
         if arg['command']=='add':
-            pass
+            beacon = self.scanner_thread.scanDelegate.addBeacon(self.driver, arg['mac'], arg['mac'])
+            self.add_accessory(beacon)
+            self.driver.config_changed()
+            result = 'added '+arg['mac']
+        if arg['command']=='remove':
+            devices = self.scanner_thread.scanDelegate.thermo_beacons
+            dev = devices.get(arg['mac'])
+            if dev:
+                del self.accessories[dev.aid]
+                del devices[arg['mac']]
+            result = 'rmoved ' + arg['mac']
+            self.driver.config_changed()
              
         return result
             

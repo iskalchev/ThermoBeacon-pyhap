@@ -1,3 +1,5 @@
+#!/usr/bin/env python3
+
 '''
 Scanner tool for Brifit Bluetooth LE thermometer/hygrometer devices.
 Shows the characteristics of the found devices
