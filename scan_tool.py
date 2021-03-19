@@ -31,7 +31,7 @@ class ScanDelegate(DefaultDelegate):
 
             data = tb_protocol.TBMsgAdvertise(bvalue)
             #print(manufact_data)
-            print('MAC:{0}, T= {1:5.2f}\xb0C, H = {2:3.2f}%, Button:{4}, Battery : {5:02.0f}%, UpTime = {3:.0f}s'.\
+            print('MAC [{0}], T= {1:5.2f}\xb0C, H = {2:3.2f}%, Button:{4}, Battery : {5:02.0f}%, UpTime = {3:.0f}s'.\
                   format(dev.addr, data.tmp, data.hum, data.upt, 'On ' if data.btn else 'Off', data.btr))
 
 scanDelegate = ScanDelegate()

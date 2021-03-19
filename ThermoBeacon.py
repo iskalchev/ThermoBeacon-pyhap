@@ -92,7 +92,7 @@ class ThermoBeacon(Accessory):
 
     async def run(self):
         t=int(self.expire_time-time.time())
-        logger.debug( self.mac + ' ' + str(t))
+        #logger.debug( self.mac + ' ' + str(t))
 
         batt_low = 0 if self.v_batt_level > 15 else 1
         
@@ -241,6 +241,8 @@ class ThermoBeaconBridge(Bridge):
                 del devices[arg['mac']]
             result = 'rmoved ' + arg['mac']
             self.driver.config_changed()
+        if arg['command']=='config':
+            pass
              
         return result
             
