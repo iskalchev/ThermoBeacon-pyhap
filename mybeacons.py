@@ -22,7 +22,10 @@ sub.add_argument('-mac', type=mac_addr, required=True)
 sub = subparsers.add_parser('identify', help = "Identify a device")
 sub.add_argument('-mac', type=mac_addr, required=True)
 sub = subparsers.add_parser('config', help = 'Save configuration')
-sub.add_argument('-s', '--save', action='store_true', help='Save to config file')
+sub.add_argument('-s', '--save', action='store_true', help='Save configuration to file')
+sub = subparsers.add_parser('listen', help = "Listen for device")
+sub.add_argument('-n', '-name', required=True, help='Device Name')
+sub.add_argument('-t', '-time', type=int, default=10, help='Seconds to wait')
 
 args = parser.parse_args()
  
