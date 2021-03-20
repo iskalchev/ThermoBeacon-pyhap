@@ -11,7 +11,7 @@ This is:
 """
 import logging
 import signal
-import json
+#import json
 
 import os
 
@@ -25,19 +25,19 @@ logging.basicConfig(level=logging.INFO, format="[%(module)s] %(message)s")
 '''
 Load configuration
 '''
-def load_config():
-    config = dict()
-    with open(os.path.expanduser('~/.hap-python/beacons.json')) as cfg_file:
-        config_data = json.load(cfg_file)
-    for d in config_data:
-        config[d['mac']]=d['name']
-    return config
+#def load_config():
+#    config = dict()
+#    with open(os.path.expanduser('~/.hap-python/beacons.json')) as cfg_file:
+#        config_data = json.load(cfg_file)
+#    for d in config_data:
+#        config[d['mac']]={'name':d['name'], 'aid':d['aid'] if 'aid' in d else -1}
+#    return config
 
-config = load_config()
+#config = load_config()
 
 # Start the accessory on port 51826
 driver = AccessoryDriver(port=51826,persist_file='~/.hap-python/.accessory.state', pincode=b'123-12-123')
-bridge = ThermoBeaconBridge(driver, config)
+bridge = ThermoBeaconBridge(driver, config_file = os.path.expanduser('~/.hap-python/beacons.json'))
 
 #Run a Bridge
 driver.add_accessory(accessory=bridge)

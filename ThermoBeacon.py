@@ -1,4 +1,4 @@
-import logging, json
+import logging, json, os
 
 import threading, asyncio, time, argparse
 from concurrent.futures import ThreadPoolExecutor
@@ -168,15 +168,17 @@ class ScanDelegate(DefaultDelegate):
                 device.identify_pending = False
 
             
-    def addBeacon(self, driver, macAddress, displayName):
-        self.thermo_beacons[macAddress]=ThermoBeacon(driver, display_name = displayName)
+    def addBeacon(self, driver, macAddress, dev_info):
+        self.thermo_beacons[macAddress]=ThermoBeacon(driver, display_name = dev_info['name'])
         self.thermo_beacons[macAddress].mac=macAddress
-        logger.info('Added beacon ' + macAddress)
+        self.thermo_beacons[macAddress].cfg_name = dev_info['name']
+        self.thermo_beacons[macAddress].cfg_aid = dev_info['aid']
+        logger.info('Added beacon ' + macAddress + '(' + dev_info['name'] + ')')
         return self.thermo_beacons[macAddress]
 
 
 class ThermoBeaconBridge(Bridge):
-    def __init__(self, driver, config):
+    def __init__(self, driver, config_file):
         super().__init__(driver, display_name='ThermoBeacon Bridge')
 
         self.update_interval = 10
@@ -184,13 +186,28 @@ class ThermoBeaconBridge(Bridge):
         self.stop_flag = threading.Event()
         self.scanner_thread = BTScannerThread(event=self.stop_flag)
 
+        self.config_file = config_file
+        config = self.load_config(config_file)
         #create Accessory objects
         for mac in config:
             beacon = self.scanner_thread.scanDelegate.addBeacon(driver, mac, config[mac])
+            if beacon.cfg_aid != -1:
+                beacon.aid = beacon.cfg_aid
             self.add_accessory(beacon)
 
         #Start ScannerThread
         self.scanner_thread.start()
+
+    '''
+    Load configuration
+    '''
+    def load_config(self, file_path):
+        config = dict()
+        with open(file_path) as cfg_file:
+            config_data = json.load(cfg_file)
+        for d in config_data:
+            config[d['mac']]={'name':d['name'], 'aid':d['aid'] if 'aid' in d else -1}
+        return config
 
     async def stop(self):
         self.stop_flag.set()
@@ -217,10 +234,10 @@ class ThermoBeaconBridge(Bridge):
             for dev in devices:
                 device = devices[dev]
                 if device.available:
-                    result += '[{0}], T= {1:5.2f}\xb0C, H = {2:3.2f}%, UpTime = {3:.0f}s\n'.\
-                             format(device.mac, device.v_temperature, device.v_humidity, device.v_uptime)
+                    result += '[{0}] AID({1:3d}) T = {2:5.2f}\xb0C, H = {3:3.2f}%, UpTime = {4:.0f}s [{5}]\n'.\
+                             format(device.mac, device.aid, device.v_temperature, device.v_humidity, device.v_uptime, device.cfg_name)
                 else:
-                    result += '[{0}] - unavailable\n'.format(device.mac)
+                    result += '[{0}] AID({1:3d}) - unavailable\n'.format(device.mac, device.aid)
         if arg['command']=='identify':
             devices = self.scanner_thread.scanDelegate.thermo_beacons
             dev = devices.get(arg['mac'])
@@ -242,7 +259,16 @@ class ThermoBeaconBridge(Bridge):
             result = 'rmoved ' + arg['mac']
             self.driver.config_changed()
         if arg['command']=='config':
-            pass
+            devices = self.scanner_thread.scanDelegate.thermo_beacons
+            data = list()
+            for mac in devices:
+                dev = devices[mac]
+                data.append({'mac':dev.mac, 'name':dev.cfg_name, 'aid':dev.aid})
+            str_j = json.dumps(data, indent=4)
+            if arg['save']:
+                with open(self.config_file, 'w') as cfg_file:
+                    cfg_file.write(str_j)
+            result = str_j;
              
         return result
             
