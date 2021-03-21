@@ -7,7 +7,6 @@ import logging
 import os, signal
 
 from pyhap.accessory_driver import AccessoryDriver
-
 from ThermoBeacon import ThermoBeaconBridge
 
 logging.basicConfig(level=logging.INFO, format="[%(module)s] %(message)s")
