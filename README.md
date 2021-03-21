@@ -4,9 +4,16 @@
 
 [HAP-python](https://github.com/ikalchev/HAP-python) Bridge for Brifit bluetooth thermometer/hygrometer devices
 
-## Requirements
+## Table of Contents
+1. [Requirements](#Requirements)
+2. [Usage](#Usage)
+3. [Tools](#Tools)
+4. [Supported devices](#Devices)
+5. [Useful Links](#Links)
 
-### 1. Install [bluepy](https://github.com/IanHarvey/bluepy)
+## Requirements <a name="Requirements"></a>
+
+### 1. Install [bluepy Python library](https://github.com/IanHarvey/bluepy)
 
     $ sudo apt-get install libglib2.0-dev
     $ sudo pip3 install bluepy
@@ -19,7 +26,7 @@ If you do not want to run your BT scripts as root (or under sudo), you may also 
 
     $ pip3 install HAP-python
 
-## Usage
+## Usage <a name="Usage"></a>
 
 [Here](https://github.com/ikalchev/HAP-python#run-at-boot-) you can find more details on how to start your service.
 
@@ -70,7 +77,7 @@ JSON encoded list of devices:
 ]
 ```
 
-## Tools
+## Tools <a name="Tools"></a>
 ### scan-tool.py
 This tool scans for ThermoBeacon BTLE devices and displays useful information about them (mac addrss, current temperature and hummidity, ...)
 
@@ -79,21 +86,29 @@ Command line interface to HAP-python service.
 
 ```
 $ ./mybeacons.py -h
-usage: mybeacons.py [-h] {list,add,remove,identify,config,listen} ...
+usage: mybeacons.py [-h] {list,add,remove,identify,config,discover} ...
 
 positional arguments:
-  {list,add,remove,identify,config,listen}
+  {list,add,remove,identify,config,discover}
                         action
     list                List devices
     add                 Add device
     remove              Remove device
     identify            Identify a device
     config              Save configuration
-    listen              Listen for device
+    discover            Listen for device
 
 optional arguments:
   -h, --help            show this help message and exit
+
 ```
 
+## Supported devices <a name="Devices"></a>
+[Brifit Bluetooth thermometer and hygrometer, wireless](https://www.amazon.de/-/en/gp/product/B08DLHFKT3/ref=ppx_yo_dt_b_asin_title_o00_s01?ie=UTF8&psc=1)
+[ORIA Wireless Thermometer Hygrometer](https://www.amazon.co.uk/dp/B08GKB5D1M/ref=emc_b_5_t)
+## Useful Links <a name="Links"></a>
+[Python script to scan temperatures and humidity from a Thermobeacon](https://github.com/rnlgreen/thermobeacon)
 
+[Raspberry pi forum thread](https://www.raspberrypi.org/forums/viewtopic.php?f=91&t=283011)
  
+[bluepy Python library](https://github.com/IanHarvey/bluepy)
