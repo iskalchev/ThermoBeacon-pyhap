@@ -12,7 +12,7 @@ def mac_addr(x):
 
  
 parser = ArgumentParser()
-subparsers = parser.add_subparsers(help='action', dest='command')
+subparsers = parser.add_subparsers(help='action', dest='command', required=True)
  
 sub = subparsers.add_parser('list', help = "List devices")
 sub = subparsers.add_parser('add', help = "Add device")
@@ -23,9 +23,9 @@ sub = subparsers.add_parser('identify', help = "Identify a device")
 sub.add_argument('-mac', type=mac_addr, required=True)
 sub = subparsers.add_parser('config', help = 'Save configuration')
 sub.add_argument('-s', '--save', action='store_true', help='Save configuration to file')
-sub = subparsers.add_parser('listen', help = "Listen for device")
-sub.add_argument('-n', '-name', required=True, help='Device Name')
-sub.add_argument('-t', '-time', type=int, default=10, help='Seconds to wait')
+sub = subparsers.add_parser('discover', help = "Listen for device")
+sub.add_argument('-n', required=True, metavar='Name', help='Device Name')
+sub.add_argument('-t', type=int, choices=range(10,30), default=10, metavar='Timeout', help='Seconds to wait')
 
 args = parser.parse_args()
  

@@ -266,6 +266,8 @@ class ThermoBeaconBridge(Bridge):
                 with open(self.config_file, 'w') as cfg_file:
                     cfg_file.write(str_j)
             result = str_j;
+        if arg['command'=='discover':
+               pass
              
         return result
             
