@@ -70,7 +70,6 @@ class ThermoBeacon(Accessory):
         self.get_service("AccessoryInformation").configure_char('Identify', setter_callback=self.set_identify)
 
     def get_low_battery(self):
-        logger.debug('get low battery')
         return 0 if self.available else (0 if self.v_batt_level > 15 else 1)
 
     def get_temperature(self):
@@ -219,10 +218,8 @@ class ThermoBeaconBridge(Bridge):
         udp_srv_thread.start()
 
         while not await event_wait(self.driver.aio_stop_event, self.update_interval):
-            logger.debug('Updating accessories info.')
             await super().run()
-            logger.debug('End Updating accessories info.')
-
+            
     def config_message(self, message):
         message = str(message).rstrip('\n')
         logger.debug('Config Message: '+message)
@@ -290,7 +287,7 @@ class BTScannerThread(threading.Thread):
                 scanner.process(20)
                 scanner.stop()
             except Exception as exc:
-                logger.debug('Exception > ' + str(exc))
+                #logger.debug('Exception > ' + str(exc))
                 pass
         logger.debug('ScannerThread: exit')
 
