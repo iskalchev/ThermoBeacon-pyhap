@@ -109,7 +109,7 @@ class ThermoBeacon(Accessory):
     @property
     def available(self):
         t=int(self.expire_time-time.time())
-        logger.debug(self.mac + ' available ' + str(t))
+        #logger.debug(self.mac + ' available ' + str(t))
         return True if t>0 else False
 
     @property
