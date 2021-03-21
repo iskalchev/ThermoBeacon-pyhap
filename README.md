@@ -2,9 +2,24 @@
 
 
 
-[HAP-python](https://github.com/ikalchev/HAP-python) Bridge for Brifit bluetooth thermometer/hygrometer
+[HAP-python](https://github.com/ikalchev/HAP-python) Bridge for Brifit bluetooth thermometer/hygrometer devices
 
 ## Usage
+
+Install [bluepy](https://github.com/IanHarvey/bluepy)
+
+    $ sudo apt-get install libglib2.0-dev
+    $ sudo pip3 install bluepy
+#### Note:
+If you do not want to run your BT scripts as root (or under sudo), you may also give the required capabilities to the bluepy-helper binary, that comes with bluepy. [More details...](https://unix.stackexchange.com/questions/96106/bluetooth-le-scan-as-non-root/182559#182559)
+
+    $ sudo setcap 'cap_net_raw,cap_net_admin+eip' /usr/local/lib/python3.7/dist-packages/bluepy/bluepy-helper
+Install [HAP-python](https://github.com/ikalchev/HAP-python)
+
+    $ pip3 install HAP-python
+
+
+
 ```python
 import logging
 import os, signal
@@ -28,11 +43,12 @@ signal.signal(signal.SIGTERM, driver.signal_handler)
 # Start it!
 driver.start()
 ```
+## Tools
+### scan-tool.py
+This tool scans for ThermoBeacon BTLE devices and displays useful information about them (mac addrss, current temperature and hummidity, ...)
 
-### Note:
-If you do not want to run your BT scripts as root (or under sudo), you may also give the required capabilities to the bluepy-helper binary, that comes with bluepy. [More details...](https://unix.stackexchange.com/questions/96106/bluetooth-le-scan-as-non-root/182559#182559)
+### mybeacons.py
 
-sudo setcap 'cap_net_raw,cap_net_admin+eip' /usr/local/lib/python3.7/dist-packages/bluepy/bluepy-helper
 
 
 
