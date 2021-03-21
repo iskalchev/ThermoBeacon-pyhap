@@ -80,11 +80,11 @@ class ThermoBeacon(Accessory):
         for i in range(10):
             try:
                 dev = btle.Peripheral(self.mac)
-                write_bytes(dev, '02000000')
+                cmd = '{:02x}'.format(tb_protocol.TB_COMMAND_IDENTIFY)
+                write_bytes(dev, cmd)
                 dev.disconnect()
                 break
             except Exception as exc:
-                logger.debug(self.mac)
                 logger.debug('Exception ' + str(exc))
                 pass
             time.sleep(0.2)
@@ -143,10 +143,13 @@ class ScanDelegate(DefaultDelegate):
         """ Accessories """
         self.thermo_beacons = dict()
 
+        #discover callback
+        self.devDiscovered = None
+
     def handleDiscovery(self, dev, isNewDev, isNewData):
         device = self.thermo_beacons.get(dev.addr)
         #logger.debug('discobvery:--' + dev.addr + str(device))
-        if device is None:
+        if device is None and self.devDiscovered is None:
             return;
         if isNewDev:
             pass
@@ -161,10 +164,15 @@ class ScanDelegate(DefaultDelegate):
             if len(bvalue)!=20 or complete_name!='ThermoBeacon':
                 return
             
-            device.parseData(bvalue)
-            if device.identify_pending:
-                device.set_identify(1)
-                device.identify_pending = False
+            if self.devDiscovered is not None:
+                if bvalue[3]==0x80:
+                    self.devDiscovered.discovered(dev.addr)
+
+            if device is not None:
+                device.parseData(bvalue)
+                if device.identify_pending:
+                    device.set_identify(1)
+                    device.identify_pending = False
 
             
     def addBeacon(self, driver, macAddress, dev_info):
@@ -220,7 +228,7 @@ class ThermoBeaconBridge(Bridge):
         while not await event_wait(self.driver.aio_stop_event, self.update_interval):
             await super().run()
             
-    def config_message(self, message):
+    def processCommand(self, message):
         message = str(message).rstrip('\n')
         logger.debug('Config Message: '+message)
         arg = json.JSONDecoder().decode(message)
@@ -243,7 +251,7 @@ class ThermoBeaconBridge(Bridge):
                 result = 'indetifying....' + dev.mac
                 dev.identify_pending = True
         if arg['command']=='add':
-            beacon = self.scanner_thread.scanDelegate.addBeacon(self.driver, arg['mac'], arg['mac'])
+            beacon = self.scanner_thread.scanDelegate.addBeacon(self.driver, arg['mac'], {'name':arg['name'], 'aid':-1})
             self.add_accessory(beacon)
             self.driver.config_changed()
             result = 'added '+arg['mac']
@@ -265,13 +273,41 @@ class ThermoBeaconBridge(Bridge):
             if arg['save']:
                 with open(self.config_file, 'w') as cfg_file:
                     cfg_file.write(str_j)
-            result = str_j;
-        if arg['command'=='discover':
-               pass
+            result = str_j
+        if arg['command']=='discover':
+            #self.scanner_thread.scanDelegate.cb_discovery = self.discoveryCallback
+            delegate = Discovered(arg['n'], self.discoveryCallback)
+            result = 'no device discovered'
+            self.scanner_thread.scanDelegate.devDiscovered = delegate
+            delegate.stop_event.wait(arg['t'])
+            if delegate.result is not None:
+                result = 'added device '+str(delegate.result.mac)
+            self.scanner_thread.scanDelegate.devDiscovered = None
              
         return result
-            
-            
+
+    def discoveryCallback(self, mac, name):
+        logger.debug('discovered - '+str(mac))
+        self.scanner_thread.scanDelegate.devDiscovered=None
+        devices = self.scanner_thread.scanDelegate.thermo_beacons
+        beacon = None
+        if devices.get(mac) is None:
+            beacon = self.scanner_thread.scanDelegate.addBeacon(self.driver, mac, {'name':name, 'aid':-1})
+            self.add_accessory(beacon)
+            self.driver.config_changed()
+        return beacon
+
+class Discovered:
+    def __init__(self, name, callback):
+        self.name = name
+        self.callback = callback
+        self.stop_event = threading.Event()
+        self.result = None
+
+    def discovered(self, mac):
+        self.result = self.callback(mac, self.name)
+        self.stop_event.set()
+
 class BTScannerThread(threading.Thread):
     def __init__(self, event):
         threading.Thread.__init__(self)
@@ -294,8 +330,8 @@ class BTScannerThread(threading.Thread):
         logger.debug('ScannerThread: exit')
 
 class ConfigProtocol:
-    def __init__(self, bridge):
-        self.bridge = bridge
+    def __init__(self, command_handler):
+        self.command_handler = command_handler
     
     def connection_made(self, transport):
         self.transport = transport
@@ -303,7 +339,7 @@ class ConfigProtocol:
     def datagram_received(self, data, addr):
         message = data.decode()
         logger.debug('Received %r from %s' % (message, addr))
-        result = self.bridge.config_message(message)
+        result = self.command_handler.processCommand(message)
         logger.debug('Send %s to %s' % (result, addr))
         self.transport.sendto(bytes(result, 'utf-8'), addr)
 

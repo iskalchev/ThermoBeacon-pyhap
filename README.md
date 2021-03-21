@@ -105,7 +105,9 @@ optional arguments:
 
 ## Supported devices <a name="Devices"></a>
 [Brifit Bluetooth thermometer and hygrometer, wireless](https://www.amazon.de/-/en/gp/product/B08DLHFKT3/ref=ppx_yo_dt_b_asin_title_o00_s01?ie=UTF8&psc=1)
+
 [ORIA Wireless Thermometer Hygrometer](https://www.amazon.co.uk/dp/B08GKB5D1M/ref=emc_b_5_t)
+
 ## Useful Links <a name="Links"></a>
 [Python script to scan temperatures and humidity from a Thermobeacon](https://github.com/rnlgreen/thermobeacon)
 
