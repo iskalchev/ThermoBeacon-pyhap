@@ -21,8 +21,9 @@ If you do not want to run your BT scripts as root (or under sudo), you may also 
 
 ## Usage
 
-#### Create and run your script - [here](https://github.com/ikalchev/HAP-python#run-at-boot-) you can find more details on how to start your service.
+[Here](https://github.com/ikalchev/HAP-python#run-at-boot-) you can find more details on how to start your service.
 
+Below is an example `hap-python.py` script:
 
 ```python
 import logging
@@ -52,8 +53,25 @@ driver.start()
 This tool scans for ThermoBeacon BTLE devices and displays useful information about them (mac addrss, current temperature and hummidity, ...)
 
 ### mybeacons.py
+Command line interface to HAP-python service.
 
+```
+$ ./mybeacons.py -h
+usage: mybeacons.py [-h] {list,add,remove,identify,config,listen} ...
 
+positional arguments:
+  {list,add,remove,identify,config,listen}
+                        action
+    list                List devices
+    add                 Add device
+    remove              Remove device
+    identify            Identify a device
+    config              Save configuration
+    listen              Listen for device
+
+optional arguments:
+  -h, --help            show this help message and exit
+```
 
 
  
