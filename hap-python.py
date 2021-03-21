@@ -11,9 +11,15 @@ from ThermoBeacon import ThermoBeaconBridge
 
 logging.basicConfig(level=logging.INFO, format="[%(module)s] %(message)s")
 
+service_dir = '~/.hap-python/'
+
 # Start the accessory on port 51826
-driver = AccessoryDriver(port=51826,persist_file='~/.hap-python/.accessory.state', pincode=b'123-12-123')
-bridge = ThermoBeaconBridge(driver, config_file = os.path.expanduser('~/.hap-python/beacons.json'))
+driver = AccessoryDriver(port=51826,
+                         persist_file = service_dir + '.accessory.state',
+                         pincode=b'123-12-123')
+
+bridge = ThermoBeaconBridge(driver,
+                            config_file = os.path.expanduser(service_dir + 'beacons.json'))
 
 #Run a Bridge
 driver.add_accessory(accessory=bridge)

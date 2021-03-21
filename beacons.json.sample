@@ -1,0 +1,10 @@
+[
+    {
+        "mac": "fa:ac:00:00:11:33",
+        "name": "garage",
+    },
+    {
+        "mac": "fa:ac:00:00:11:55",
+        "name": "living room",
+    }
+]
