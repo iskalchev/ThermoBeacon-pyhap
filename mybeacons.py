@@ -2,9 +2,7 @@
 
 import sys, re, json, asyncio
 from argparse import ArgumentParser, Namespace
- 
-#print(sys.argv[1:])
- 
+  
 def mac_addr(x):
     if not re.match("[0-9a-f]{2}([-:]?)[0-9a-f]{2}(\\1[0-9a-f]{2}){4}$", x.lower()):
         raise ValueError()
@@ -25,23 +23,20 @@ sub.add_argument('-mac', type=mac_addr, required=True)
 sub = subparsers.add_parser('config', help = 'Save configuration')
 sub.add_argument('-s', '--save', action='store_true', help='Save configuration to file')
 sub = subparsers.add_parser('discover', help = "Listen for device")
-sub.add_argument('-n', required=True, metavar='Name', help='Device Name')
+sub.add_argument('-name', required=True, metavar='Name', help='Device Name')
 sub.add_argument('-t', type=int, choices=range(10,31), default=10, metavar='Timeout', help='Seconds to wait')
 
 args = parser.parse_args()
  
-#print('=======')
-#parser.print_usage()
 
-js=json.JSONEncoder().encode(vars(args))
-#print(js)
+config_cmd = json.JSONEncoder().encode(vars(args))
 
 
 
 
 '''
 '''
-class EchoClientProtocol:
+class ConfigClientProtocol:
     def __init__(self, message, on_con_lost):
         self.message = message
         self.on_con_lost = on_con_lost
@@ -49,13 +44,11 @@ class EchoClientProtocol:
 
     def connection_made(self, transport):
         self.transport = transport
-        #print('Send:', self.message)
         self.transport.sendto(self.message.encode())
 
     def datagram_received(self, data, addr):
         print(data.decode())
 
-        #print("Close the socket")
         self.transport.close()
 
     def error_received(self, exc):
@@ -76,7 +69,7 @@ async def connect(msg):
     message = msg #"Hello World!"
 
     transport, protocol = await loop.create_datagram_endpoint(
-        lambda: EchoClientProtocol(message, on_con_lost),
+        lambda: ConfigClientProtocol(message, on_con_lost),
         remote_addr=('127.0.0.1', 9999))
 
     # Wait until the protocol signals that the connection
@@ -87,4 +80,4 @@ async def connect(msg):
         transport.close()
 
 
-asyncio.run(connect(js))
+asyncio.run(connect(config_cmd))
