@@ -1,21 +1,25 @@
 import logging, json, os
 
-import threading, asyncio, time, argparse
-from concurrent.futures import ThreadPoolExecutor
+import threading, queue,asyncio, time, argparse
 
 from pyhap.accessory import Accessory, Bridge
 from pyhap.const import CATEGORY_SENSOR
 from pyhap.util import event_wait
 
-from bluepy.btle import Scanner, DefaultDelegate
-from bluepy import btle
+from bluepy.btle import DefaultDelegate
 
 import tb_protocol
+
+from tb_config import UDPSrvThread
+from tb_btle import *
 
 logger = logging.getLogger('ThermoBeacon')
 logger.setLevel(logging.DEBUG)
 
-        
+
+'''
+ThermoBeacon HAP-python accessory class
+'''
 class ThermoBeacon(Accessory):
 
     category = CATEGORY_SENSOR
@@ -26,8 +30,6 @@ class ThermoBeacon(Accessory):
         self._mac='00:00:00:00:00:00'
         
         self.expire_time = 0
-
-        self.identify_pending = False
 
         self.v_temperature = 0
         self.v_humidity = 0
@@ -40,15 +42,12 @@ class ThermoBeacon(Accessory):
         service.configure_char(
             'CurrentTemperature',
             getter_callback = lambda: self.v_temperature
-            #properties=self.common_properties
         )
         service.configure_char(
             'StatusLowBattery',
             getter_callback = self.get_low_battery
-            #properties=self.common_properties
         )
 
-        
         service = self.add_preload_service('BatteryService')
         service.configure_char(
             'StatusLowBattery',
@@ -91,8 +90,7 @@ class ThermoBeacon(Accessory):
 
     async def run(self):
         t=int(self.expire_time-time.time())
-        #logger.debug( self.mac + ' ' + str(t))
-
+        
         batt_low = 0 if self.v_batt_level > 15 else 1
         
         service = self.get_service('TemperatureSensor')
@@ -135,6 +133,9 @@ class ThermoBeacon(Accessory):
         logger.debug('Stop ' + self.mac)
 
 
+'''
+Derived from Bluepy’s DefaultDelegate
+'''
 class ScanDelegate(DefaultDelegate):
 
     def __init__(self):
@@ -143,37 +144,31 @@ class ScanDelegate(DefaultDelegate):
         """ Accessories """
         self.thermo_beacons = dict()
 
-        #discover callback
-        self.devDiscovered = None
+        #helper object - used during device discovery process
+        self.discoverDelegate = None
+
+        #pending device for identification
+        self.identify_queue=queue.Queue()
 
     def handleDiscovery(self, dev, isNewDev, isNewData):
         device = self.thermo_beacons.get(dev.addr)
-        #logger.debug('discobvery:--' + dev.addr + str(device))
-        if device is None and self.devDiscovered is None:
+        if device is None and self.discoverDelegate is None:
             return;
-        if isNewDev:
-            pass
-        if True or isNewData:
-            #logger.debug('discobvery:' + dev.addr)
+        
+        complete_name=dev.getValueText(0x09)
+        manufact_data=dev.getValueText(0xff)
+        if complete_name is None or manufact_data is None:
+            return
+        bvalue=bytes.fromhex(manufact_data)
+        if len(bvalue)!=20 or complete_name!='ThermoBeacon':
+            return
+        
+        if self.discoverDelegate is not None:
+            if bvalue[3]==0x80: #if the device's button has been pressed
+                self.discoverDelegate.cb_discovered(dev.addr)
 
-            complete_name=dev.getValueText(0x09)
-            manufact_data=dev.getValueText(0xff)
-            if complete_name is None or manufact_data is None:
-                return
-            bvalue=bytes.fromhex(manufact_data)
-            if len(bvalue)!=20 or complete_name!='ThermoBeacon':
-                return
-            
-            if self.devDiscovered is not None:
-                if bvalue[3]==0x80:
-                    self.devDiscovered.discovered(dev.addr)
-
-            if device is not None:
-                device.parseData(bvalue)
-                if device.identify_pending:
-                    device.set_identify(1)
-                    device.identify_pending = False
-
+        if device is not None:
+            device.parseData(bvalue)          
             
     def addBeacon(self, driver, macAddress, dev_info):
         self.thermo_beacons[macAddress]=ThermoBeacon(driver, display_name = dev_info['name'])
@@ -189,9 +184,9 @@ class ThermoBeaconBridge(Bridge):
         super().__init__(driver, display_name='ThermoBeacon Bridge')
 
         self.update_interval = 10
-        
+
         self.stop_flag = threading.Event()
-        self.scanner_thread = BTScannerThread(event=self.stop_flag)
+        self.scanner_thread = BTScannerThread(event=self.stop_flag, scanDelegate=ScanDelegate())
 
         self.config_file = config_file
         config = self.load_config(config_file)
@@ -216,18 +211,25 @@ class ThermoBeaconBridge(Bridge):
             config[d['mac']]={'name':d['name'], 'aid':d['aid'] if 'aid' in d else -1}
         return config
 
+    #override Bridge.stop() method
     async def stop(self):
         self.stop_flag.set()
         await super().stop()
 
+    #override Bridge.run() method
     async def run(self):
+        #start our "configuration server"
         udp_srv_thread = UDPSrvThread(self)
         udp_srv_thread.daemon = True
         udp_srv_thread.start()
 
         while not await event_wait(self.driver.aio_stop_event, self.update_interval):
             await super().run()
-            
+
+    '''
+    method for handling configuration commands
+    see: mybeacons.py
+    '''
     def processCommand(self, message):
         message = str(message).rstrip('\n')
         logger.debug('Config Message: '+message)
@@ -239,7 +241,7 @@ class ThermoBeaconBridge(Bridge):
             for dev in devices:
                 device = devices[dev]
                 if device.available:
-                    result += '[{0}] AID({1:3d}) T = {2:5.2f}\xb0C, H = {3:3.2f}%, UpTime = {4:.0f}s [{5}]\n'.\
+                    result += '[{0}] AID({1:3d}) T = {2:5.2f}\xb0C, H = {3:3.2f}%, UpTime = {4:6.0f}s [{5}]\n'.\
                              format(device.mac, device.aid, device.v_temperature, device.v_humidity, device.v_uptime, device.cfg_name)
                 else:
                     result += '[{0}] AID({1:3d}) - unavailable\n'.format(device.mac, device.aid)
@@ -247,9 +249,13 @@ class ThermoBeaconBridge(Bridge):
             devices = self.scanner_thread.scanDelegate.thermo_beacons
             dev = devices.get(arg['mac'])
             if dev:
-                logger.debug('------------ '+str(dev))
-                result = 'indetifying....' + dev.mac
-                dev.identify_pending = True
+                result = 'Connection failed.'
+                delegate = CmdState(target_mac = dev.mac, identify_timeout = 20)
+                self.scanner_thread.scanDelegate.identify_queue.put(delegate)
+                if not delegate.stop_event.wait(delegate.identify_timeout):
+                    delegate.stop_event.set()
+                if delegate.identified:
+                    result = 'Identified'
         if arg['command']=='add':
             beacon = self.scanner_thread.scanDelegate.addBeacon(self.driver, arg['mac'], {'name':arg['name'], 'aid':-1})
             self.add_accessory(beacon)
@@ -275,108 +281,53 @@ class ThermoBeaconBridge(Bridge):
                     cfg_file.write(str_j)
             result = str_j
         if arg['command']=='discover':
-            #self.scanner_thread.scanDelegate.cb_discovery = self.discoveryCallback
-            delegate = Discovered(arg['n'], self.discoveryCallback)
+            delegate = CmdState()
             result = 'no device discovered'
-            self.scanner_thread.scanDelegate.devDiscovered = delegate
+            self.scanner_thread.scanDelegate.discoverDelegate = delegate
             delegate.stop_event.wait(arg['t'])
-            if delegate.result is not None:
-                result = 'added device '+str(delegate.result.mac)
-            self.scanner_thread.scanDelegate.devDiscovered = None
+            self.scanner_thread.scanDelegate.discoverDelegate = None
+            logger.debug('discovered ' + str(delegate.discovered_mac))
+            if delegate.discovered_mac is not None:
+                if self.add_discovered(delegate.discovered_mac, arg['name']):
+                    result = 'device is joined successfully '+str(delegate.discovered_mac)
+                else:
+                    result = 'cannot add existing device ' + str(delegate.discovered_mac)
              
         return result
 
-    def discoveryCallback(self, mac, name):
-        logger.debug('discovered - '+str(mac))
-        self.scanner_thread.scanDelegate.devDiscovered=None
+    def add_discovered(self, mac, name):
+        self.scanner_thread.scanDelegate.discoverDelegate = None
         devices = self.scanner_thread.scanDelegate.thermo_beacons
-        beacon = None
+        result = False
         if devices.get(mac) is None:
             beacon = self.scanner_thread.scanDelegate.addBeacon(self.driver, mac, {'name':name, 'aid':-1})
             self.add_accessory(beacon)
             self.driver.config_changed()
-        return beacon
+            result = True
+        return result
 
-class Discovered:
-    def __init__(self, name, callback):
-        self.name = name
-        self.callback = callback
+'''
+keep the current state of the pending command
+- identify device
+- discover device
+'''
+class CmdState:
+    def __init__(self, target_mac = None, identify_timeout = None):
+
+        #set to cancel the command
         self.stop_event = threading.Event()
-        self.result = None
 
-    def discovered(self, mac):
-        self.result = self.callback(mac, self.name)
+        #discover
+        self.discovered_mac = None
+
+        #identify
+        self.target_mac = target_mac
+        self.identify_timeout = identify_timeout
+        self.identified = False
+
+    def cb_discovered(self, mac):
+        self.discovered_mac = mac
         self.stop_event.set()
-
-class BTScannerThread(threading.Thread):
-    def __init__(self, event):
-        threading.Thread.__init__(self)
-
-        self.stop_event = event
-        self.scanDelegate=ScanDelegate()
-
-    def run(self):
-        while not self.stop_event.wait(5):
-            scanner = Scanner().withDelegate(self.scanDelegate)
-            try:
-                logger.debug('Continue scanning')
-                scanner.clear()
-                scanner.start()
-                scanner.process(20)
-                scanner.stop()
-            except Exception as exc:
-                #logger.debug('Exception > ' + str(exc))
-                pass
-        logger.debug('ScannerThread: exit')
-
-class ConfigProtocol:
-    def __init__(self, command_handler):
-        self.command_handler = command_handler
     
-    def connection_made(self, transport):
-        self.transport = transport
 
-    def datagram_received(self, data, addr):
-        message = data.decode()
-        logger.debug('Received %r from %s' % (message, addr))
-        result = self.command_handler.processCommand(message)
-        logger.debug('Send %s to %s' % (result, addr))
-        self.transport.sendto(bytes(result, 'utf-8'), addr)
-
-'''
-echo "test" | socat -t 10 - udp:127.0.0.1:9999
-'''
-class UDPSrvThread(threading.Thread):
-    def __init__(self, bridge):
-        threading.Thread.__init__(self)
-        self.bridge = bridge
-
-    def run(self):
-        self.loop = asyncio.new_event_loop()
-        self.executor = ThreadPoolExecutor()
-        self.loop.set_default_executor(self.executor)
-        connect = self.loop.create_datagram_endpoint(
-            lambda: ConfigProtocol(self.bridge),
-            local_addr=('127.0.0.1', 9999))
-        transport, protocol = self.loop.run_until_complete(connect)
-        self.loop.run_forever()
-
-######################################################################
-
-#Transmit Handle 0x0021
-TX_CHAR_UUID = btle.UUID('0000fff5-0000-1000-8000-00805F9B34FB')
-#Read Handle 0x0024
-RX_CHAR_UUID = btle.UUID('0000fff3-0000-1000-8000-00805F9B34FB')
-
-#Function to send a string to the device as a bytearray and return the results received
-def write_bytes(dev, vals):
-    #Get handles to the transmit and receieve characteristics
-    tx = dev.getCharacteristics(uuid=TX_CHAR_UUID)[0]
-    rx = dev.getCharacteristics(uuid=RX_CHAR_UUID)[0]
-    write_val = bytearray.fromhex(vals)
-    tx.write(write_val)
-    read_val = rx.read()
-    return read_val
-
-######################################################################
 
