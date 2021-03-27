@@ -26,5 +26,7 @@ class TBMsgAdvertise:
         self.upt = int.from_bytes(bvalue[16:20],byteorder='little')
 
 
-TB_COMMAND_RESET    = 0x02
-TB_COMMAND_IDENTIFY = 0x04
+TB_COMMAND_RESET      = 0x02
+TB_COMMAND_TEMP_SCALE = 0x03
+TB_COMMAND_IDENTIFY   = 0x04
+TB_COMMAND_DUMPALL    = 0x07

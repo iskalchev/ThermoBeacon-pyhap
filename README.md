@@ -79,7 +79,7 @@ JSON encoded list of devices:
 
 ## Tools <a name="Tools"></a>
 ### scan-tool.py
-This tool scans for ThermoBeacon BTLE devices and displays useful information about them (mac addrss, current temperature and hummidity, ...)
+This tool scans for ThermoBeacon BLE devices and displays useful information about them (mac addrss, current temperature and hummidity, ...)
 
 ### mybeacons.py
 Command line interface to HAP-python service.
