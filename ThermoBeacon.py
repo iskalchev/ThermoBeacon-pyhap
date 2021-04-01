@@ -8,6 +8,8 @@ from pyhap.util import event_wait
 
 from bluepy.btle import DefaultDelegate
 
+#from bleak import BleakScanner
+
 import tb_protocol
 
 from tb_config import UDPSrvThread
