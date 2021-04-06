@@ -215,27 +215,7 @@ class ThermoBeaconBridge(Bridge):
     async def stop(self):
         self.stop_flag.set()
         await super().stop()
-
-    def detection_callback(self, device, advertisement_data):
-        #('RSSI:', -88, AdvertisementData(local_name='ThermoBeacon', manufacturer_data={16: b'\x00\x00\x17\x1a\x00\x00\xac\xfap\x01q\xc8\x01\x00X\x01\x84\x18\x08\x00'}, service_uuids=['0000fff0-0000-1000-8000-00805f9b34fb']))
-        name = advertisement_data.local_name
-        if name is None:
-            return
-        if name != 'ThermoBeacon':
-            return
-        msg = advertisement_data.manufacturer_data
-        #print(bytes.fromhex(msg))
-        #print(device.address, type(device))
-        beacons = self.scanner_thread.scanDelegate.thermo_beacons
-        beacon = beacons.get(device.address.lower())
-        if beacon is None:
-            return
-        for key in msg.keys():
-            if len(msg[key])==18:
-                msg = tb_protocol.TBMsgAdvertise(key, msg[key])
-                beacon.parseData(msg)
-            #print(str(key) +' '+msg[key].hex())
-        
+    
     #override Bridge.run() method
     async def run(self):
         #start our "configuration server"
