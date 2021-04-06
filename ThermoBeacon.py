@@ -8,8 +8,6 @@ from pyhap.util import event_wait
 
 from bluepy.btle import DefaultDelegate
 
-#from bleak import BleakScanner
-
 import tb_protocol
 
 from tb_config import UDPSrvThread
@@ -98,7 +96,7 @@ class ThermoBeacon(Accessory):
         service = self.get_service('TemperatureSensor')
         service.get_characteristic('CurrentTemperature').set_value(self.v_temperature)
         service.get_characteristic('StatusLowBattery').set_value(batt_low)
-
+        
         service = self.get_service('HumiditySensor')
         service.get_characteristic('CurrentRelativeHumidity').set_value(self.v_humidity)
         
@@ -121,8 +119,7 @@ class ThermoBeacon(Accessory):
        self._mac=value
        self.set_info_service(serial_number=value)
 
-    def parseData(self, bvalue):
-        data = tb_protocol.TBMsgAdvertise(bvalue)
+    def parseData(self, data):
         self.v_button      = data.btn
         self.v_batt_level  = data.btr
         self.v_temperature = data.tmp
@@ -170,7 +167,8 @@ class ScanDelegate(DefaultDelegate):
                 self.discoverDelegate.cb_discovered(dev.addr)
 
         if device is not None:
-            device.parseData(bvalue)          
+            msg = tb_protocol.TBMsgAdvertise(bvalue[0]+(bvalue[1]<<8), bvalue[2:])
+            device.parseData(msg)          
             
     def addBeacon(self, driver, macAddress, dev_info):
         self.thermo_beacons[macAddress]=ThermoBeacon(driver, display_name = dev_info['name'])
@@ -189,7 +187,7 @@ class ThermoBeaconBridge(Bridge):
 
         self.stop_flag = threading.Event()
         self.scanner_thread = BTScannerThread(event=self.stop_flag, scanDelegate=ScanDelegate())
-
+        
         self.config_file = config_file
         config = self.load_config(config_file)
         #create Accessory objects
@@ -218,6 +216,26 @@ class ThermoBeaconBridge(Bridge):
         self.stop_flag.set()
         await super().stop()
 
+    def detection_callback(self, device, advertisement_data):
+        #('RSSI:', -88, AdvertisementData(local_name='ThermoBeacon', manufacturer_data={16: b'\x00\x00\x17\x1a\x00\x00\xac\xfap\x01q\xc8\x01\x00X\x01\x84\x18\x08\x00'}, service_uuids=['0000fff0-0000-1000-8000-00805f9b34fb']))
+        name = advertisement_data.local_name
+        if name is None:
+            return
+        if name != 'ThermoBeacon':
+            return
+        msg = advertisement_data.manufacturer_data
+        #print(bytes.fromhex(msg))
+        #print(device.address, type(device))
+        beacons = self.scanner_thread.scanDelegate.thermo_beacons
+        beacon = beacons.get(device.address.lower())
+        if beacon is None:
+            return
+        for key in msg.keys():
+            if len(msg[key])==18:
+                msg = tb_protocol.TBMsgAdvertise(key, msg[key])
+                beacon.parseData(msg)
+            #print(str(key) +' '+msg[key].hex())
+        
     #override Bridge.run() method
     async def run(self):
         #start our "configuration server"
@@ -226,6 +244,7 @@ class ThermoBeaconBridge(Bridge):
         udp_srv_thread.start()
 
         while not await event_wait(self.driver.aio_stop_event, self.update_interval):
+
             await super().run()
 
     '''
