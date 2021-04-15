@@ -167,7 +167,7 @@ class ScanDelegate(DefaultDelegate):
                 self.discoverDelegate.cb_discovered(dev.addr)
 
         if device is not None:
-            msg = tb_protocol.TBMsgAdvertise(bvalue[0]+(bvalue[1]<<8), bvalue[2:])
+            msg = tb_protocol.TBAdvData(bvalue[0]+(bvalue[1]<<8), bvalue[2:])
             device.parseData(msg)          
             
     def addBeacon(self, driver, macAddress, dev_info):
